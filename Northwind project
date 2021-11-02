@@ -1,0 +1,272 @@
+--1) List the top 10 customers by value ordered in the year 1998. Select customerid, company name order by
+--value descending
+			
+select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value
+	from customers c
+		inner join orders o
+		on c.customerid = o.customerid
+			inner join order_details od
+			on o.orderid = od.orderid
+				where extract(year from orderdate) = 1998
+					group by c.customerid,c.companyname
+						order by value desc limit 10;
+
+--2) Make a report of country, Total Suppliers, Total Customers by year order by year ascending,
+	--Total Customers and Total Suppliers descending
+
+select extract(year from o.orderdate) as year, c.country,
+	count(c.customerid) as TotalCustomers, count(s.supplierid) as TotalSuppliers 
+		from customers c
+			inner join orders o
+			on c.customerid = o.customerid
+				inner join order_details od
+				on o.orderid = od.orderid
+					inner join products p
+					on od.productid = p.productid
+						inner join suppliers s
+						on p.supplierid = s.supplierid
+		group by extract(year from o.orderdate),c.country
+			order by year, TotalCustomers desc,TotalSuppliers desc;
+			
+-- 3) Make a report with customerid,company name, total order value by product by year, order by 
+		-- year descending and total order value descending
+		
+select extract(year from o.orderdate) as year, c.customerid, c.companyname,p.productid,
+	sum(od.quantity*od.unitprice) as TotalValue
+		from products p
+			inner join order_details od
+			on p.productid = od.productid
+				inner join orders o
+				on od.orderid = o.orderid
+					inner join customers c
+					on o.customerid = c.customerid
+			group by extract(year from o.orderdate),c.customerid,c.companyname,p.productid
+				order by year desc,totalvalue desc;
+
+--4) Make a customer grouping of low,medium,high based on value of orders and the percentage in each in the year 1998
+
+select c.customerid,c.companyname,sum(od.quantity*od.unitprice) as OrderValue,
+	case when sum(od.quantity*od.unitprice) <1000 then 'Low'
+		 when sum(od.quantity*od.unitprice) <5000 then 'Medium'
+		 else 'High' end as category
+		 	from customers c
+				inner join orders o
+				on c.customerid = o.customerid
+					inner join order_details od
+					on o.orderid = od.orderid
+		 	where extract(year from o.orderdate) = 1998
+		 		group by c.customerid,c.companyname
+					order by category;
+
+--5) Show all orders made on the last day of the month in 1998
+
+select orderid,customerid,orderdate,extract(month from orderdate) as month
+		from orders
+			where extract(year from orderdate) = 1997
+					and orderdate = date_trunc('month',orderdate)+interval '1 month' - interval '1 day'
+				order by orderdate;
+
+--6) Make a report for customers with multiple orders in a 5 day period in the year 1998. Show 
+--both order dates in the 5 day period
+
+with NextOrder as (
+	select c.customerid, c.companyname,o.orderdate,
+		lead(orderdate,1) over(partition by c.customerid order by o.orderdate asc) as NextOrderDate
+			from customers c
+			inner join orders o
+		on c.customerid = o.customerid)
+		
+select n.customerid,n.companyname,n.orderdate,n.NextOrderDate
+	from NextOrder n
+		where n.NextOrderDate - n.orderdate <=5;
+
+---7) Find the address for the last order shipped for each customer
+
+select customerid,companyname, shipaddress from(
+	select c.customerid,c.companyname,o.shipaddress,
+		row_number() over(partition by c.customerid order by o.orderdate desc) as RowNumber 
+			from customers c
+				inner join orders o
+				on c.customerid = o.customerid
+					order by customerid) as subq
+						where RowNumber = 1
+
+--8) Select the value growth by product in 1998 
+
+with v98 as (
+	select p.productid,p.productname,sum(od.quantity*od.unitprice) as value98
+		from products p
+			inner join order_details od
+			on p.productid = od.productid
+				inner join orders o
+				on od.orderid = o.orderid
+					where extract(year from o.orderdate) = 1998
+						group by p.productid,p.productname),
+
+v97 as (
+	select p.productid,p.productname,sum(od.quantity*od.unitprice) as value97
+		from products p
+			inner join order_details od
+			on p.productid = od.productid
+				inner join orders o
+				on od.orderid = o.orderid
+					where extract(year from o.orderdate) = 1997
+						group by p.productid,p.productname
+	)
+	
+select v98.productid,v98.productname,v98.value98 as "Value 98",v97.value97 as "Value 97",
+	round(cast((v98.value98/v97.value97-1)*100 as numeric),2) as growth
+		from v98
+			inner join v97
+			on v98.productid = v97.productid
+				order by growth desc;
+
+--9) Select the customers for which the ordered value grew at least 10% IN 1998 
+
+with v98 as (
+	select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value98
+		from customers c
+			inner join orders o
+			on c.customerid = o.customerid
+				inner join order_details od
+				on o.orderid = od.orderid
+					where extract(year from o.orderdate) = 1998
+						group by c.customerid,c.companyname
+			),
+
+v97 as (
+	select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value97
+		from customers c
+			inner join orders o
+			on c.customerid = o.customerid
+				inner join order_details od
+				on o.orderid = od.orderid
+					where extract(year from o.orderdate) = 1997
+						group by c.customerid,c.companyname
+	)
+	
+select customerid,companyname,growth from(
+	select v98.customerid,v98.companyname,v98.value98 as "Value 98",v97.value97 as "Value 97",
+			round(cast((v98.value98/v97.value97-1)*100 as numeric),2) as growth
+				from v98
+					inner join v97
+					on v98.customerid = v97.customerid
+						order by growth desc) as subq
+							where growth>100;
+
+--10) For each of the customers above, what is the top product that they ordered
+
+with v98 as (
+select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value98
+		from customers c
+			inner join orders o
+			on c.customerid = o.customerid
+				inner join order_details od
+				on o.orderid = od.orderid
+						where extract(year from o.orderdate) = 1998
+							group by c.customerid,c.companyname),
+							
+v97 as (
+select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value97
+		from customers c
+			inner join orders o
+			on c.customerid = o.customerid
+				inner join order_details od
+				on o.orderid = od.orderid
+						where extract(year from o.orderdate) = 1997
+							group by c.customerid,c.companyname),
+							
+TopC as (
+	select customerid,companyname,growth from(
+		select v98.customerid,v98.companyname,v98.value98 as "Value 98",v97.value97 as "Value 97",
+			round(cast((v98.value98/v97.value97-1)*100 as numeric),2) as growth
+				from v98
+					inner join v97
+					on v98.customerid = v97.customerid
+						order by growth desc) as subq
+							where growth>100)
+							
+select customerid,companyname,growth,productid,productname, rank from(
+	select t.customerid,t.companyname,t.growth,p.productid,p.productname,
+		rank() over(partition by t.customerid order by sum(od.quantity*od.unitprice) desc)
+			from TopC as t
+				inner join orders o
+				on t.customerid = o.customerid
+					inner join order_details od
+					on o.orderid = od.orderid
+						inner join products p
+						on od.productid = p.productid
+			group by t.customerid,t.companyname,t.growth,p.productid,p.productname
+		) as subq
+	where rank = 1
+
+
+--11) What is the 25th and 95th percentile quantity ordered and the product of the orders in the year 1997
+
+with nt as(
+ select p.productid, p.productname,od.quantity,
+		ntile(100) over(order by od.quantity) as percentile
+			from products p
+				inner join order_details od
+				on p.productid = od.productid
+					inner join orders o
+					on od.orderid = o.orderid
+				where extract(year from o.orderdate) = 1997)
+
+select productid,productname,quantity,percentile
+	from nt
+		where percentile in (25,95);
+		
+				
+--12) Show number of orders that were delivered late by Employees vs All orders vs Percentage of late orders in the year 1997
+
+with numo as (
+select employeeid, count(*) as LateOrders 
+	from orders
+		where shippeddate > requireddate
+			and extract(year from orderdate) = 1997
+				group by employeeid
+				),
+				
+allo as (
+select employeeid, count(orderid) as AllOrders
+	from orders o
+		where extract(year from orderdate) = 1997
+			group by employeeid
+			)
+			
+select numo.employeeid,numo.LateOrders,allo.Allorders,
+	cast(to_char((numo.LateOrders/cast(allo.Allorders as float))*100.0,'FM999999999.00') as float) as PercLate
+		from numo
+			inner join allo
+			on numo.employeeid = allo.employeeid
+					order by PercLate desc;
+
+			
+--13) Find the second top order of the top product ordered in the year 1998
+	
+with tp as (select p.productid, sum(od.quantity*od.unitprice) as ProductValue,
+				dense_rank() over(order by sum(od.quantity*od.unitprice) desc) as ProductRank
+			from products p
+				inner join order_details od
+				on p.productid = od.productid
+					inner join orders o
+					on od.orderid = o.orderid
+						where extract(year from o.orderdate) = 1998
+				 			group by p.productid)
+							
+select productid,orderid,OrderRank from(							
+	select tp.productid,o.orderid,sum(od.quantity*od.unitprice) as OrderValue,
+		dense_rank() over(partition by tp.productid order by sum(od.quantity*od.unitprice) desc) as OrderRank 
+			from tp 
+			inner join order_details od
+			on tp.productid = od.productid
+					inner join orders o
+					on od.orderid = o.orderid
+						where tp.ProductRank = 1
+							group by tp.productid,o.orderid) as subq
+								where OrderRank = 2;
+
+		
+				 
+				 
