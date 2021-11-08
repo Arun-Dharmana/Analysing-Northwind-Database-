@@ -1,6 +1,9 @@
 --1) List the top 10 customers by value ordered in the year 1998. Select customerid, company name order by
 --value descending
-			
+
+--Solution: customerid, companyname from customers table, order value from order_details table
+--join the tables on orderid
+
 select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value
 	from customers c
 		inner join orders o
@@ -13,6 +16,9 @@ select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value
 
 --2) Make a report of country, Total Suppliers, Total Customers by year order by year ascending,
 	--Total Customers and Total Suppliers descending
+
+--Solution: country, Total Customers from customers table, Total Suppliers from suppliers table,
+--year from orders table, join the tables with customerid, orderid, productid and supplierid
 
 select extract(year from o.orderdate) as year, c.country,
 	count(c.customerid) as TotalCustomers, count(s.supplierid) as TotalSuppliers 
@@ -30,7 +36,11 @@ select extract(year from o.orderdate) as year, c.country,
 			
 -- 3) Make a report with customerid,company name, total order value by product by year, order by 
 		-- year descending and total order value descending
-		
+
+--Solution: customerid, companyname from customers table, productid from products table,
+--order value from order_details table, year from orders table, 
+-- join the tables with productid, orderid, customerid
+
 select extract(year from o.orderdate) as year, c.customerid, c.companyname,p.productid,
 	sum(od.quantity*od.unitprice) as TotalValue
 		from products p
@@ -44,6 +54,9 @@ select extract(year from o.orderdate) as year, c.customerid, c.companyname,p.pro
 				order by year desc,totalvalue desc;
 
 --4) Make a customer grouping of low,medium,high based on value of orders and the percentage in each in the year 1998
+
+--Solution: customerid, companyname from customers table, order value from order_details table, 
+--use case keyword to make the grouping, join the tables with customerid and orderid
 
 select c.customerid,c.companyname,sum(od.quantity*od.unitprice) as OrderValue,
 	case when sum(od.quantity*od.unitprice) <1000 then 'Low'
@@ -60,6 +73,9 @@ select c.customerid,c.companyname,sum(od.quantity*od.unitprice) as OrderValue,
 
 --5) Show all orders made on the last day of the month in 1998
 
+--Solution: customerid, orderid, order date, month from orders table, 
+--use date_trunc and interval to extract the last day of each month
+
 select orderid,customerid,orderdate,extract(month from orderdate) as month
 		from orders
 			where extract(year from orderdate) = 1997
@@ -69,18 +85,26 @@ select orderid,customerid,orderdate,extract(month from orderdate) as month
 --6) Make a report for customers with multiple orders in a 5 day period in the year 1998. Show 
 --both order dates in the 5 day period
 
+--Solution: A CTE to get the customerid, companyname from customers table, order date from orders table, 
+--and the window function lead to get the the next order date, join the tables on customerid 
+
 with NextOrder as (
 	select c.customerid, c.companyname,o.orderdate,
 		lead(orderdate,1) over(partition by c.customerid order by o.orderdate asc) as NextOrderDate
 			from customers c
 			inner join orders o
 		on c.customerid = o.customerid)
-		
+
+--A query to extract the orders from the CTE with less than equal to 5 days difference between the orders
+
 select n.customerid,n.companyname,n.orderdate,n.NextOrderDate
 	from NextOrder n
 		where n.NextOrderDate - n.orderdate <=5;
 
 ---7) Find the address for the last order shipped for each customer
+
+----Solution: customerid, companyname from customers table, ship address,order date from orders table, 
+--and the window function row_number to get the the last order, join the tables on customerid 
 
 select customerid,companyname, shipaddress from(
 	select c.customerid,c.companyname,o.shipaddress,
@@ -91,7 +115,11 @@ select customerid,companyname, shipaddress from(
 					order by customerid) as subq
 						where RowNumber = 1
 
---8) Select the value growth by product in 1998 
+--8) Calculate the Year-on-Year value growth by product in 1998 
+
+--Solution: A CTE to calculate the value by product in the year 1998. productid, productname from
+-- products table, order value from order_details table, year from orders table 
+-- join tables on productid and orderid 
 
 with v98 as (
 	select p.productid,p.productname,sum(od.quantity*od.unitprice) as value98
@@ -103,6 +131,10 @@ with v98 as (
 					where extract(year from o.orderdate) = 1998
 						group by p.productid,p.productname),
 
+--A CTE to calculate the value by product in the year 1997. productid, productname from
+-- products table, order value from order_details table, year from orders table 
+-- join tables on productid and orderid 
+
 v97 as (
 	select p.productid,p.productname,sum(od.quantity*od.unitprice) as value97
 		from products p
@@ -113,7 +145,9 @@ v97 as (
 					where extract(year from o.orderdate) = 1997
 						group by p.productid,p.productname
 	)
-	
+
+--Query to calculate growth rate by product from the two CTE's
+
 select v98.productid,v98.productname,v98.value98 as "Value 98",v97.value97 as "Value 97",
 	round(cast((v98.value98/v97.value97-1)*100 as numeric),2) as growth
 		from v98
@@ -122,6 +156,10 @@ select v98.productid,v98.productname,v98.value98 as "Value 98",v97.value97 as "V
 				order by growth desc;
 
 --9) Select the customers for which the ordered value grew at least 10% IN 1998 
+
+--Solution: A CTE to calculate the value by customer in the year 1998. customerid, customername from
+-- customers table, order value from order_details table, year from orders table 
+-- join tables on customerid and orderid 
 
 with v98 as (
 	select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value98
@@ -134,6 +172,11 @@ with v98 as (
 						group by c.customerid,c.companyname
 			),
 
+--A CTE to calculate the value by customer in the year 1997. customerid, customername from
+-- customers table, order value from order_details table, year from orders table 
+-- join tables on customerid and orderid 
+
+
 v97 as (
 	select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value97
 		from customers c
@@ -144,7 +187,9 @@ v97 as (
 					where extract(year from o.orderdate) = 1997
 						group by c.customerid,c.companyname
 	)
-	
+
+--Query to extract the customers whose growth rate exceeds 10% by customer from the two CTE's
+
 select customerid,companyname,growth from(
 	select v98.customerid,v98.companyname,v98.value98 as "Value 98",v97.value97 as "Value 97",
 			round(cast((v98.value98/v97.value97-1)*100 as numeric),2) as growth
@@ -156,6 +201,10 @@ select customerid,companyname,growth from(
 
 --10) For each of the customers above, what is the top product that they ordered
 
+--Solution: A CTE to calculate the value by customer in the year 1998. customerid, customername from
+-- customers table, order value from order_details table, year from orders table 
+-- join tables on customerid and orderid 
+
 with v98 as (
 select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value98
 		from customers c
@@ -165,7 +214,11 @@ select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value98
 				on o.orderid = od.orderid
 						where extract(year from o.orderdate) = 1998
 							group by c.customerid,c.companyname),
-							
+
+--A CTE to calculate the value by customer in the year 1997. customerid, customername from
+-- customers table, order value from order_details table, year from orders table 
+-- join tables on customerid and orderid 
+
 v97 as (
 select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value97
 		from customers c
@@ -175,7 +228,9 @@ select c.customerid, c.companyname, sum(od.quantity*od.unitprice) as value97
 				on o.orderid = od.orderid
 						where extract(year from o.orderdate) = 1997
 							group by c.customerid,c.companyname),
-							
+
+--CTE to extract the customers whose growth rate exceeds 10% by customer from the two CTE's
+
 TopC as (
 	select customerid,companyname,growth from(
 		select v98.customerid,v98.companyname,v98.value98 as "Value 98",v97.value97 as "Value 97",
@@ -185,7 +240,10 @@ TopC as (
 					on v98.customerid = v97.customerid
 						order by growth desc) as subq
 							where growth>100)
-							
+
+--Query to extract the top product that the customers in the above CTE ordered using 
+--the rank window function  
+
 select customerid,companyname,growth,productid,productname, rank from(
 	select t.customerid,t.companyname,t.growth,p.productid,p.productname,
 		rank() over(partition by t.customerid order by sum(od.quantity*od.unitprice) desc)
@@ -203,6 +261,10 @@ select customerid,companyname,growth,productid,productname, rank from(
 
 --11) What is the 25th and 95th percentile quantity ordered and the product of the orders in the year 1997
 
+--Solution: A CTE to divide the quantities by percentiles using the ntile window function. 
+--productid, productname from products table, order value from order_details table, year from orders table 
+-- join tables on productid and orderid
+
 with nt as(
  select p.productid, p.productname,od.quantity,
 		ntile(100) over(order by od.quantity) as percentile
@@ -213,12 +275,17 @@ with nt as(
 					on od.orderid = o.orderid
 				where extract(year from o.orderdate) = 1997)
 
+--Query to select the 25th and 95th percentile quantity and the corresponding product from the CTE
+
 select productid,productname,quantity,percentile
 	from nt
 		where percentile in (25,95);
 		
 				
 --12) Show number of orders that were delivered late by Employees vs All orders vs Percentage of late orders in the year 1997
+
+--Solution: A CTE to extract the late orders by employee in 1997 where late orders are defined as orders
+--which have shipped date greater than required date. 
 
 with numo as (
 select employeeid, count(*) as LateOrders 
@@ -227,7 +294,9 @@ select employeeid, count(*) as LateOrders
 			and extract(year from orderdate) = 1997
 				group by employeeid
 				),
-				
+
+--A CTE to extract all orders by employee in the year 1997.
+
 allo as (
 select employeeid, count(orderid) as AllOrders
 	from orders o
@@ -235,6 +304,8 @@ select employeeid, count(orderid) as AllOrders
 			group by employeeid
 			)
 			
+--Query to extract late orders, all orders and percentage of late orders by employee from the two CTE's.
+
 select numo.employeeid,numo.LateOrders,allo.Allorders,
 	cast(to_char((numo.LateOrders/cast(allo.Allorders as float))*100.0,'FM999999999.00') as float) as PercLate
 		from numo
@@ -244,7 +315,11 @@ select numo.employeeid,numo.LateOrders,allo.Allorders,
 
 			
 --13) Find the second top order of the top product ordered in the year 1998
-	
+
+--Solution: A CTE to rank the products by ordered value in the year 1998 using the dense_rank window function.
+--productid from products table, order value from order_details table, year from orders table 
+-- join tables on productid and orderid
+
 with tp as (select p.productid, sum(od.quantity*od.unitprice) as ProductValue,
 				dense_rank() over(order by sum(od.quantity*od.unitprice) desc) as ProductRank
 			from products p
@@ -254,7 +329,9 @@ with tp as (select p.productid, sum(od.quantity*od.unitprice) as ProductValue,
 					on od.orderid = o.orderid
 						where extract(year from o.orderdate) = 1998
 				 			group by p.productid)
-							
+
+--Query to extract the second top order of the top products by value using the dense_rank window function
+
 select productid,orderid,OrderRank from(							
 	select tp.productid,o.orderid,sum(od.quantity*od.unitprice) as OrderValue,
 		dense_rank() over(partition by tp.productid order by sum(od.quantity*od.unitprice) desc) as OrderRank 
