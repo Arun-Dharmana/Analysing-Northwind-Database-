@@ -78,7 +78,7 @@ select c.customerid,c.companyname,sum(od.quantity*od.unitprice) as OrderValue,
 
 select orderid,customerid,orderdate,extract(month from orderdate) as month
 		from orders
-			where extract(year from orderdate) = 1997
+			where extract(year from orderdate) = 1998
 					and orderdate = date_trunc('month',orderdate)+interval '1 month' - interval '1 day'
 				order by orderdate;
 
@@ -97,9 +97,9 @@ with NextOrder as (
 
 --A query to extract the orders from the CTE with less than equal to 5 days difference between the orders
 
-select n.customerid,n.companyname,n.orderdate,n.NextOrderDate
-	from NextOrder n
-		where n.NextOrderDate - n.orderdate <=5;
+select customerid,companyname,orderdate,NextOrderDate
+	from NextOrder
+		where NextOrderDate - orderdate <=5;
 
 ---7) Find the address for the last order shipped for each customer
 
@@ -197,7 +197,7 @@ select customerid,companyname,growth from(
 					inner join v97
 					on v98.customerid = v97.customerid
 						order by growth desc) as subq
-							where growth>100;
+							where growth>10;
 
 --10) For each of the customers above, what is the top product that they ordered
 
